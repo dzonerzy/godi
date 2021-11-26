@@ -21,4 +21,17 @@ func main() {
 	default:
 		fmt.Println("Decode failed:", res)
 	}
+	instlist := make([]godi.DInst, 20)
+	info := godi.NewCodeInfo(0x10000, code, godi.Decode64Bits)
+	res = godi.DistormDecompose64(info, instlist, 20, &usedinstructions)
+	switch res {
+	case godi.DECRES_SUCCESS:
+		fmt.Println("Decompose success got", usedinstructions, "instructions")
+		for i := 0; i < int(usedinstructions); i++ {
+			fmt.Printf("0x%x \n", instlist[i].Ops[0])
+		}
+	default:
+		fmt.Println("Decompose failed:", res)
+	}
+	info.Destroy()
 }

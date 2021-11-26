@@ -6,6 +6,23 @@ package godi
 #cgo windows LDFLAGS: -L${SRCDIR}/libs -ldistorm3-windows
 #include <distorm.h>
 #include <mnemonics.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+unsigned char * alloc_code(void * buffer, int size) {
+	void * buf = malloc(size);
+	memcpy(buf, buffer, size);
+	return buf;
+}
+
+void destroy_code(unsigned char * buf) {
+	free(buf);
+}
+
+_DecodeResult wrap_distorm_decode64(unsigned long codeOffset, const unsigned char* code, int codeLen, _DecodeType dt, _DecodedInst result[], unsigned int maxInstructions, unsigned int* usedInstructionsCount) {
+	return distorm_decode64((_OffsetType)codeOffset, code, codeLen, dt, result,  maxInstructions, usedInstructionsCount);
+}
 */
 import "C"
 import "unsafe"
@@ -59,6 +76,26 @@ const (
 	O_PTR  = C.O_PTR
 
 	OPERANDS_NO = C.OPERANDS_NO
+
+	// Features
+	DF_NONE                 = C.DF_NONE
+	DF_MAXIMUM_ADDR16       = C.DF_MAXIMUM_ADDR16
+	DF_MAXIMUM_ADDR32       = C.DF_MAXIMUM_ADDR32
+	DF_RETURN_FC_ONLY       = C.DF_RETURN_FC_ONLY
+	DF_STOP_ON_CALL         = C.DF_STOP_ON_CALL
+	DF_STOP_ON_RET          = C.DF_STOP_ON_RET
+	DF_STOP_ON_SYS          = C.DF_STOP_ON_SYS
+	DF_STOP_ON_UNC_BRANCH   = C.DF_STOP_ON_UNC_BRANCH
+	DF_STOP_ON_CND_BRANCH   = C.DF_STOP_ON_CND_BRANCH
+	DF_STOP_ON_INT          = C.DF_STOP_ON_INT
+	DF_STOP_ON_CMOV         = C.DF_STOP_ON_CMOV
+	DF_STOP_ON_HLT          = C.DF_STOP_ON_HLT
+	DF_STOP_ON_PRIVILEGED   = C.DF_STOP_ON_PRIVILEGED
+	DF_STOP_ON_UNDECODEABLE = C.DF_STOP_ON_UNDECODEABLE
+	DF_SINGLE_BYTE_STEP     = C.DF_SINGLE_BYTE_STEP
+	DF_FILL_EFLAGS          = C.DF_FILL_EFLAGS
+	DF_USE_ADDR_MASK        = C.DF_USE_ADDR_MASK
+	DF_STOP_ON_FLOW_CONTROL = (DF_STOP_ON_CALL | DF_STOP_ON_RET | DF_STOP_ON_SYS | DF_STOP_ON_UNC_BRANCH | DF_STOP_ON_CND_BRANCH | DF_STOP_ON_INT | DF_STOP_ON_CMOV | DF_STOP_ON_HLT)
 )
 
 type DecodeType C._DecodeType
@@ -75,16 +112,12 @@ type CodeInfo struct {
 	Features   uint32
 }
 
+func (c *CodeInfo) Destroy() {
+	C.destroy_code(c.Code)
+}
+
 type Value struct {
-	Sbyte  int8
-	Byte   uint8
-	Sword  int16
-	Word   uint16
-	Sdword int32
-	Dword  uint32
-	Sqword int64
-	Qword  uint64
-	Mem    [8]uint8
+	Mem [8]uint8
 }
 
 type Operand struct {
@@ -133,18 +166,25 @@ type DecodedInstruction struct {
 }
 
 func NewCodeInfo(Offset int, Code []byte, Dt DecodeType) *CodeInfo {
-	return &CodeInfo{
+	ci := &CodeInfo{
 		CodeOffset: OffsetType(Offset),
-		Code:       (*C.uchar)(unsafe.Pointer(&Code[0])),
-		Dt:         Dt,
-		Features:   0,
+		// Code:       (*C.uchar)(unsafe.Pointer(C.CString(string(Code)))), works
+		CodeLen:  int32(len(Code)),
+		Dt:       Dt,
+		Features: 0,
 	}
+	ci.Code = C.alloc_code(unsafe.Pointer(&Code[0]), C.int(len(Code)))
+	return ci
 }
 
 func Version() int {
 	return int(C.distorm_version())
 }
 
+func DistormDecompose64(Info *CodeInfo, Inst []DInst, MaxInstructions uint, UsedInstructionsCount *uint) DecodeResult {
+	return DecodeResult(C.distorm_decompose64((*C._CodeInfo)(unsafe.Pointer(Info)), (*C._DInst)(unsafe.Pointer(&Inst[0])), C.uint(MaxInstructions), (*C.uint)(unsafe.Pointer(UsedInstructionsCount))))
+}
+
 func DistormDecode64(CodeOffset OffsetType, Code []byte, CodeLen int, Dt DecodeType, Result []DecodedInstruction, MaxInstructions uint, UsedInstructionsCount *uint) DecodeResult {
-	return DecodeResult(C.distorm_decode64(C.ulong(CodeOffset), (*C.uchar)(unsafe.Pointer(&Code[0])), C.int(CodeLen), C._DecodeType(Dt), (*C._DecodedInst)(unsafe.Pointer(&Result[0])), C.uint(MaxInstructions), (*C.uint)(unsafe.Pointer(UsedInstructionsCount))))
+	return DecodeResult(C.wrap_distorm_decode64(C.ulong(CodeOffset), (*C.uchar)(unsafe.Pointer(&Code[0])), C.int(CodeLen), C._DecodeType(Dt), (*C._DecodedInst)(unsafe.Pointer(&Result[0])), C.uint(MaxInstructions), (*C.uint)(unsafe.Pointer(UsedInstructionsCount))))
 }
