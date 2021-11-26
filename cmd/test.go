@@ -28,7 +28,15 @@ func main() {
 	case godi.DECRES_SUCCESS:
 		fmt.Println("Decompose success got", usedinstructions, "instructions")
 		for i := 0; i < int(usedinstructions); i++ {
-			fmt.Printf("0x%x \n", instlist[i].Ops[0])
+			fmt.Printf("0x%x Opcode: 0x%x Opcode String: %s | ", instlist[i].Addr, instlist[i].Opcode, godi.MnemonicString(instlist[i].Opcode))
+			for k := 0; k < int(instlist[0].OpsNo); k++ {
+				ops := instlist[i].Ops[k]
+				fmt.Printf("Ops[%d] Type: %x ", k, ops.Type)
+				if ops.Type == godi.O_REG {
+					fmt.Printf("%s ", godi.RegisterString(ops.Index))
+				}
+			}
+			fmt.Println()
 		}
 	default:
 		fmt.Println("Decompose failed:", res)
